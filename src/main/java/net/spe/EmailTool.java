@@ -22,26 +22,15 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
-/**
- * Hello world!
- */
 @CommandLine.Command(description = "Send emails from templates",
         name = "emails", mixinStandardHelpOptions = true, version = "emailTemplates 0.1")
-
 public class EmailTool implements Callable<Void> {
 
     private static final Logger LOG = LoggerFactory.getLogger(EmailTool.class);
 
-    static Properties loadProperties(String path) throws IOException {
-        Properties appProps = new Properties();
-        appProps.load(new FileInputStream(path));
-
-        return appProps;
-
-    }
 
     @CommandLine.Option(names = {"-d", "--dry-run"}, description = "do not send emails out")
-    private boolean isDryRun = false;
+    boolean isDryRun = false;
 
 
     @CommandLine.Option(names = {"-s", "--smtp-properties"}, description = "path to property containing host, uname, password")
@@ -66,58 +55,73 @@ public class EmailTool implements Callable<Void> {
 
         LOG.info("Loading common template data from " + templatePropertyPath);
         Properties templateProperties = loadProperties(System.getProperty("user.dir") + "/" + templatePropertyPath);
-
-        Jinjava jinjava = new Jinjava();
-        Map<String, Object> context = Maps.newHashMap();
-
-        for (String p : templateProperties.stringPropertyNames()) {
-            context.put(p, templateProperties.getProperty(p));
-        }
-
-
-        LOG.info("Loading template from " + templatePropertyPath);
+        Properties smtpProperties = loadProperties(System.getProperty("user.dir") + "/" + smtpPropertyPath);
+        LOG.info("Loading template from " + templatePath);
         byte[] fileBytes = Files.readAllBytes(Paths.get(System.getProperty("user.dir") + "/" + templatePath));
         String template = new String(fileBytes);
 
 
-        String renderedTemplate = null;
+        Map<String, Object> context = fillContextFromPropertyFile(templateProperties);
 
-        Properties smtpProperties = loadProperties(System.getProperty("user.dir") + "/" + smtpPropertyPath);
 
-        LOG.info("Loading list of template values from " + templatePropertyPath);
+        LOG.info("Loading list of template values from " + emailDataCSVPath);
         Reader in = new FileReader(emailDataCSVPath);
         Iterable<CSVRecord> records = CSVFormat.EXCEL.withFirstRecordAsHeader().parse(in);
 
         for (CSVRecord record : records) {
-
-            String emailAddress = record.get("Email");
-            String firstName = record.get("First Name");
-            String program = record.get("Program");
-
-            context.put("firstName", firstName);
-            context.put("program", program);
-
-            renderedTemplate = jinjava.render(template, context);
-            Email email = buildEmail(smtpProperties.getProperty("smtpHost"), smtpProperties.getProperty("password"), smtpProperties.getProperty("username"), smtpProperties.getProperty("from"));
-            String subject = templateProperties.getProperty("subject");
-            LOG.debug("Setting subject: " + subject);
-            email.setSubject(subject);
-
-            LOG.debug("Setting Msg: " + renderedTemplate);
-            email.setMsg(renderedTemplate);
-            email.addTo(emailAddress);
-
-            if (!isDryRun) {
-                LOG.info("Sending email to " + emailAddress);
-                email.send();
-            }
+            iterateEmailData(templateProperties.getProperty("subject"), smtpProperties, template, context, record);
         }
 
         return null;
 
     }
 
-    static Email buildEmail(String smtpHostName, String password, String username, String fromEmail) throws EmailException {
+    private Jinjava jinjava = new Jinjava();
+
+    Email iterateEmailData(String subject, Properties smtpProperties, String template, Map<String, Object> context, CSVRecord record) throws EmailException {
+
+        String emailAddress = record.get("Email");
+        String firstName = record.get("First Name");
+        String program = record.get("Program");
+
+        context.put("firstName", firstName);
+        context.put("program", program);
+
+        String renderedTemplate = jinjava.render(template, context);
+
+
+        Email email = prepareEmail(smtpProperties.getProperty("smtpHost"), smtpProperties.getProperty("password"), smtpProperties.getProperty("username"), smtpProperties.getProperty("from"));
+        email.setSubject(subject);
+        email.setMsg(renderedTemplate);
+        email.addTo(emailAddress);
+
+        if (!isDryRun) {
+            LOG.info("Sending email to " + emailAddress);
+            email.send();
+
+        }
+        return email;
+
+    }
+
+    private Map<String, Object> fillContextFromPropertyFile(Properties templateProperties) {
+        Map<String, Object> context = Maps.newHashMap();
+
+        for (String p : templateProperties.stringPropertyNames()) {
+            context.put(p, templateProperties.getProperty(p));
+        }
+        return context;
+    }
+
+    static Properties loadProperties(String path) throws IOException {
+        Properties appProps = new Properties();
+        appProps.load(new FileInputStream(path));
+
+        return appProps;
+
+    }
+
+    static Email prepareEmail(String smtpHostName, String password, String username, String fromEmail) throws EmailException {
         Email email = new HtmlEmail();
         email.setHostName(smtpHostName);
         email.setSmtpPort(465);
