@@ -34,7 +34,7 @@ public class EmailTool implements Callable<Void> {
 
 
     @CommandLine.Option(names = {"-s", "--smtp-properties"}, description = "path to property containing host, uname, password")
-    private String smtpPropertyPath = "smtp.properties";
+    private String smtpPropertyPath = "smtp.office365.properties";
 
     @CommandLine.Option(names = {"-p", "--template-properties"}, description = "path to property containing common content")
     private String templatePropertyPath = "template.properties";
@@ -90,7 +90,7 @@ public class EmailTool implements Callable<Void> {
         String renderedTemplate = jinjava.render(template, context);
 
 
-        Email email = prepareEmail(smtpProperties.getProperty("smtpHost"), smtpProperties.getProperty("password"), smtpProperties.getProperty("username"), smtpProperties.getProperty("from"));
+        Email email = prepareEmail(smtpProperties.getProperty("smtpHost"), smtpProperties.getProperty("password"), smtpProperties.getProperty("username"), smtpProperties.getProperty("from"), Integer.valueOf(smtpProperties.getProperty("port")));
         email.setSubject(subject);
         email.setMsg(renderedTemplate);
         email.addTo(emailAddress);
@@ -121,10 +121,10 @@ public class EmailTool implements Callable<Void> {
 
     }
 
-    static Email prepareEmail(String smtpHostName, String password, String username, String fromEmail) throws EmailException {
+    static Email prepareEmail(String smtpHostName, String password, String username, String fromEmail, Integer port) throws EmailException {
         Email email = new HtmlEmail();
         email.setHostName(smtpHostName);
-        email.setSmtpPort(465);
+        email.setSmtpPort(port);
         email.setAuthenticator(new DefaultAuthenticator(username, password));
         email.setSSLOnConnect(true);
         email.setFrom(fromEmail);

@@ -1,6 +1,7 @@
 .idea
 target
 *.iml
-smtp.properties
+smtp.sendgrid.properties
+smtp.*.properties
 email_data.csv
 template.properties
